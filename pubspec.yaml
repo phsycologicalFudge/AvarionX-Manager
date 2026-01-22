@@ -1,8 +1,7 @@
 name: colourswift_manager
 description: Manager for ColourSwift apps
 publish_to: "none"
-version: 1.0.0+1002
-
+version: 2.0.0+1004
 environment:
   sdk: ">=3.0.0 <4.0.0"
 
@@ -23,6 +22,7 @@ dependencies:
   open_filex: ^4.4.0
   workmanager: ^0.6.0
   flutter_launcher_icons: ^0.13.1
+  device_apps: ^2.2.0
 
 dev_dependencies:
   flutter_launcher_icons: ^0.13.1
@@ -41,12 +41,5 @@ flutter:
 flutter_icons:
   android: true
   ios: false
-  image_path: assets/icon/icon.png
+  image_path: assets/icons/icon.png
 
-flutter_native_splash:
-  color: "#121212"
-  image: assets/icons/splash_logo.png
-  branding_mode: center
-  android_12:
-    image: assets/icons/splash_logo.png
-    color: "#121212"

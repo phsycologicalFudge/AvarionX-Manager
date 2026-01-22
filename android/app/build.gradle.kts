@@ -4,8 +4,19 @@ plugins {
     id("dev.flutter.flutter-gradle-plugin")
 }
 
+import java.util.Properties
+        import java.io.FileInputStream
+
+val localSigningFile = rootProject.file("local-signing.properties")
+val hasLocalSigning = localSigningFile.exists()
+
+val localSigningProps = Properties()
+if (hasLocalSigning) {
+    localSigningProps.load(FileInputStream(localSigningFile))
+}
+
 android {
-    namespace = "com.example.colourswift_manager"
+    namespace = "com.colourswift.avarionx.manager"
     compileSdk = flutter.compileSdkVersion
     ndkVersion = flutter.ndkVersion
 
@@ -19,20 +30,35 @@ android {
     }
 
     defaultConfig {
-        applicationId = "com.example.colourswift_manager"
+        applicationId = "com.colourswift.avarionx.manager"
         minSdk = flutter.minSdkVersion
         targetSdk = flutter.targetSdkVersion
         versionCode = flutter.versionCode
         versionName = flutter.versionName
     }
 
+    signingConfigs {
+        create("release") {
+            if (hasLocalSigning) {
+                keyAlias = localSigningProps["keyAlias"] as String
+                keyPassword = localSigningProps["keyPassword"] as String
+                storeFile = file(localSigningProps["storeFile"] as String)
+                storePassword = localSigningProps["storePassword"] as String
+            }
+        }
+    }
+
     buildTypes {
-        release {
-            signingConfig = signingConfigs.getByName("debug")
-            proguardFiles(
-                getDefaultProguardFile("proguard-android-optimize.txt"),
-                "proguard-rules.pro"
-            )
+        getByName("debug") {
+        }
+
+        getByName("release") {
+            isMinifyEnabled = false
+            isShrinkResources = false
+
+            if (hasLocalSigning) {
+                signingConfig = signingConfigs.getByName("release")
+            }
         }
     }
 
