@@ -1,7 +1,7 @@
 name: colourswift_manager
 description: Manager for ColourSwift apps
 publish_to: "none"
-version: 2.0.0+1004
+version: 2.0.1+1005
 environment:
   sdk: ">=3.0.0 <4.0.0"
 
@@ -34,9 +34,9 @@ dev_dependencies:
 flutter:
   uses-material-design: true
   assets:
-    - assets/icons/icon.png
-    - assets/apps/css_file_manager2.png
-    - assets/apps/css_security2.png
+    - assets/icons/
+    - assets/apps/
+    - assets/screenshots/
 
 flutter_icons:
   android: true

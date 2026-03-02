@@ -26,6 +26,10 @@ const managedApps = [
     'com.colourswift.securefiles',
     'phsycologicalFudge/CS-Secure-Files',
   ),
+  ManagedApp(
+    'com.colourswift.avarionxvpn',
+    'phsycologicalFudge/AvarionX-VPN',
+  ),
 ];
 
 String getPreferredAbi() {

@@ -37,6 +37,8 @@ class Installer {
 
   final ValueNotifier<DownloadState?> download = ValueNotifier<DownloadState?>(null);
 
+  static const String kMirrorUrl = 'https://colourswift.com/manager/mirror.json';
+
   void setStage(String text, {bool indeterminate = true}) {
     download.value = DownloadState(
       stage: text,
@@ -81,52 +83,106 @@ class Installer {
     return v;
   }
 
-  Future<File> downloadApk(String repo, {bool clearOverlayOnDone = true}) async {
-    download.value = DownloadState(stage: 'Fetching release info');
-
-    final releaseRes = await http.get(
-      Uri.parse('https://api.github.com/repos/$repo/releases/latest'),
+  Future<Map<String, dynamic>> _fetchMirror() async {
+    final res = await http.get(
+      Uri.parse(kMirrorUrl),
       headers: {
         'User-Agent': 'AvarionX-Manager',
-        'Accept': 'application/vnd.github+json',
+        'Accept': 'application/json',
       },
     );
 
-    if (releaseRes.statusCode != 200) {
-      download.value = null;
-      throw Exception('GitHub API error: ${releaseRes.statusCode}');
+    if (res.statusCode != 200) {
+      throw Exception('Mirror error: ${res.statusCode}');
     }
 
-    final release = jsonDecode(releaseRes.body);
+    final decoded = jsonDecode(res.body);
+    if (decoded is! Map) {
+      throw Exception('Mirror invalid JSON');
+    }
 
-    final assets = release['assets'];
-    if (assets is! List || assets.isEmpty) {
+    final apps = decoded['apps'];
+    if (apps is! Map) {
+      throw Exception('Mirror missing apps');
+    }
+
+    return apps.cast<String, dynamic>();
+  }
+
+  Map<String, dynamic>? _mirrorEntryForRepo(Map<String, dynamic> apps, String repo) {
+    final raw = apps[repo];
+    if (raw is Map) return raw.cast<String, dynamic>();
+    return null;
+  }
+
+  String? _mirrorLatestVersion(Map<String, dynamic> entry) {
+    final v = entry['latestVersion'];
+    if (v is String && v.trim().isNotEmpty) return v.trim();
+    return null;
+  }
+
+  Map<String, dynamic>? _mirrorDownloads(Map<String, dynamic> entry) {
+    final d = entry['downloads'];
+    if (d is Map) return d.cast<String, dynamic>();
+    return null;
+  }
+
+  Map<String, dynamic>? _mirrorPickDownload(Map<String, dynamic> downloads, String abi) {
+    final direct = downloads[abi];
+    if (direct is Map) return direct.cast<String, dynamic>();
+
+    final uni = downloads['universal'];
+    if (uni is Map) return uni.cast<String, dynamic>();
+
+    final any = downloads['any'];
+    if (any is Map) return any.cast<String, dynamic>();
+
+    return null;
+  }
+
+  Uri _mirrorDownloadUrl(Map<String, dynamic> picked) {
+    final url = picked['url'];
+    if (url is! String || url.trim().isEmpty) {
+      throw Exception('Mirror missing download url');
+    }
+    return Uri.parse(url.trim());
+  }
+
+  String _mirrorFileName(Map<String, dynamic> picked, Uri url) {
+    final name = picked['name'];
+    if (name is String && name.trim().isNotEmpty) return name.trim();
+    if (url.pathSegments.isNotEmpty) return Uri.decodeComponent(url.pathSegments.last);
+    return 'app.apk';
+  }
+
+  Future<File> downloadApk(String repo, {bool clearOverlayOnDone = true}) async {
+    download.value = DownloadState(stage: 'Fetching release info');
+
+    final apps = await _fetchMirror();
+    final entry = _mirrorEntryForRepo(apps, repo);
+    if (entry == null) {
       download.value = null;
-      throw Exception('No release assets found');
+      throw Exception('Mirror missing repo: $repo');
     }
 
     final abi = getPreferredAbi();
-    Map<String, dynamic>? apk;
-
-    for (final a in assets) {
-      if (a is Map &&
-          a['name'] is String &&
-          a['name'].toString().endsWith('.apk') &&
-          a['name'].toString().contains(abi)) {
-        apk = a.cast<String, dynamic>();
-        break;
-      }
+    final downloads = _mirrorDownloads(entry);
+    if (downloads == null) {
+      download.value = null;
+      throw Exception('Mirror missing downloads for repo: $repo');
     }
 
-    if (apk == null) {
+    final picked = _mirrorPickDownload(downloads, abi);
+    if (picked == null) {
       download.value = null;
       throw Exception('No APK found for ABI: $abi');
     }
 
-    final req = http.Request(
-      'GET',
-      Uri.parse(apk['browser_download_url']),
-    );
+    final apkUrl = _mirrorDownloadUrl(picked);
+    final name = _mirrorFileName(picked, apkUrl);
+
+    final req = http.Request('GET', apkUrl);
+    req.headers['User-Agent'] = 'AvarionX-Manager';
 
     final res = await http.Client().send(req);
 
@@ -138,7 +194,7 @@ class Installer {
     download.value = state;
 
     final dir = await getExternalStorageDirectory();
-    final file = File('${dir!.path}/${apk['name']}');
+    final file = File('${dir!.path}/$name');
     final sink = file.openWrite();
 
     state.sub = res.stream.listen(
@@ -282,44 +338,32 @@ class Installer {
   }
 
   Future<void> saveLatestVersion(String package, String repo) async {
-    final res = await http.get(
-      Uri.parse('https://api.github.com/repos/$repo/releases/latest'),
-      headers: {
-        'User-Agent': 'AvarionX-Manager',
-        'Accept': 'application/vnd.github+json',
-      },
-    );
+    try {
+      final apps = await _fetchMirror();
+      final entry = _mirrorEntryForRepo(apps, repo);
+      if (entry == null) return;
 
-    if (res.statusCode != 200) return;
+      final raw = _mirrorLatestVersion(entry);
+      if (raw == null) return;
 
-    final release = jsonDecode(res.body);
-    if (release['prerelease'] == true) return;
-
-    final raw = release['tag_name'];
-    if (raw is! String) return;
-
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setString('version_$package', normalizeTag(raw));
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString('version_$package', normalizeTag(raw));
+    } catch (_) {}
   }
 
   Future<String?> getLatestVersion(String repo) async {
-    final res = await http.get(
-      Uri.parse('https://api.github.com/repos/$repo/releases/latest'),
-      headers: {
-        'User-Agent': 'AvarionX-Manager',
-        'Accept': 'application/vnd.github+json',
-      },
-    );
+    try {
+      final apps = await _fetchMirror();
+      final entry = _mirrorEntryForRepo(apps, repo);
+      if (entry == null) return null;
 
-    if (res.statusCode != 200) return null;
+      final raw = _mirrorLatestVersion(entry);
+      if (raw == null) return null;
 
-    final release = jsonDecode(res.body);
-    if (release['prerelease'] == true) return null;
-
-    final raw = release['tag_name'];
-    if (raw is! String) return null;
-
-    return normalizeTag(raw);
+      return normalizeTag(raw);
+    } catch (_) {
+      return null;
+    }
   }
 
   Future<String?> getInstalledVersion(String package) async {
