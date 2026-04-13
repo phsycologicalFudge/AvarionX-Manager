@@ -18,7 +18,7 @@ The manager enables:
 Repository:  
 https://github.com/phsycologicalFudge/ColourSwift_AV
 
-With Shizuku support (from version 3.0.2), users can enable System Watcher, an advanced version of the real-time protection module.
+With Shizuku support (from version 4.2.0), users can enable System Watcher, an advanced version of the real-time protection module.
 
 ---
 
